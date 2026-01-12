@@ -1,0 +1,1610 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ActivityHub — Club Recommendations (Mock v3)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          boxShadow: {
+            soft: "0 10px 30px rgba(2,6,23,.06)",
+            card: "0 12px 34px rgba(2,6,23,.08)"
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .line-clamp-3{
+      display:-webkit-box;
+      -webkit-line-clamp:3;
+      -webkit-box-orient:vertical;
+      overflow:hidden;
+    }
+  </style>
+</head>
+
+<body class="min-h-screen bg-slate-50 text-slate-900">
+  <header class="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur">
+    <div class="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-2xl bg-blue-600 text-white grid place-items-center shadow-soft">
+          <span class="font-semibold">AH</span>
+        </div>
+        <div>
+          <div class="font-semibold leading-tight">Club Recommendations</div>
+          <div class="text-xs text-slate-500">Prototype: onboarding → ranked matches → “why this” reasons</div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button id="btnReload" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50">
+          Reload data
+        </button>
+        <button id="btnWhat" class="rounded-xl bg-slate-900 px-3 py-2 text-sm text-white hover:bg-slate-800 shadow-soft">
+          What is this?
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-6xl px-4 py-6">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <section class="lg:col-span-4">
+        <div class="rounded-3xl border border-slate-200 bg-white shadow-soft overflow-hidden">
+          <div class="p-5 border-b border-slate-200 bg-slate-50">
+            <div class="text-xs text-slate-500">Step 4 of 4</div>
+            <div class="mt-1 text-xl font-semibold">Interests</div>
+            <div class="mt-1 text-sm text-slate-600">Pick at least one interest. Then press <span class="font-medium">Get recommendations</span>.</div>
+          </div>
+
+          <div class="p-5 space-y-6">
+            <div>
+              <div class="flex items-center justify-between">
+                <div class="text-sm font-semibold">Pick at least one interest</div>
+                <button id="btnClearInterests" class="text-sm text-blue-600 hover:underline">Clear</button>
+              </div>
+
+              <div id="interestPills" class="mt-3 grid grid-cols-2 gap-3"></div>
+
+              <div id="refineWrap" class="hidden mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div class="text-sm font-semibold">Quick clarification</div>
+                <div class="mt-1 text-sm text-slate-600">
+                  You selected Faith and/or Cultural & Identity. Choose communities so we don’t recommend mismatched groups.
+                </div>
+
+                <div id="refineLoading" class="mt-3 text-sm text-slate-600">Loading options from the API…</div>
+
+                <div id="refineBody" class="hidden mt-3 space-y-4">
+                  <div id="faithBox" class="hidden">
+                    <div class="flex items-center justify-between gap-3">
+                      <div>
+                        <div class="text-sm font-medium">Faith communities</div>
+                        <div class="text-xs text-slate-500">Choose any that apply (or select “Open”).</div>
+                      </div>
+                      <label class="inline-flex items-center gap-2 text-sm">
+                        <input id="faithOpen" type="checkbox" class="h-4 w-4 rounded border-slate-300">
+                        <span class="text-slate-700">Open</span>
+                      </label>
+                    </div>
+                    <div id="faithTags" class="mt-2 flex flex-wrap gap-2"></div>
+                  </div>
+
+                  <div id="identityBox" class="hidden">
+                    <div class="flex items-center justify-between gap-3">
+                      <div>
+                        <div class="text-sm font-medium">Cultural / identity communities</div>
+                        <div class="text-xs text-slate-500">Choose any that apply (or select “Open”).</div>
+                      </div>
+                      <label class="inline-flex items-center gap-2 text-sm">
+                        <input id="identityOpen" type="checkbox" class="h-4 w-4 rounded border-slate-300">
+                        <span class="text-slate-700">Open</span>
+                      </label>
+                    </div>
+                    <div id="identityTags" class="mt-2 flex flex-wrap gap-2"></div>
+                  </div>
+
+                  <div class="text-xs text-slate-500">
+                    Note: Professional/Academic results won’t include identity-affiliated professional orgs unless you explicitly choose communities here.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <div class="text-sm font-semibold">College year</div>
+                <select id="yearSelect" class="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-4 focus:ring-blue-100">
+                  <option value="">Select…</option>
+                  <option>Freshman</option>
+                  <option>Sophomore</option>
+                  <option>Junior</option>
+                  <option>Senior</option>
+                  <option>Graduate</option>
+                </select>
+                <div class="mt-2 text-xs text-slate-500">Used for “stage fit” (explore vs leadership/career).</div>
+              </div>
+              <div>
+                <div class="text-sm font-semibold">Major</div>
+                <input id="majorInput" class="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-4 focus:ring-blue-100" placeholder="e.g., Accounting" />
+                <div class="mt-2 text-xs text-slate-500">Used as a soft boost (won’t override interests).</div>
+              </div>
+            </div>
+
+            <div id="majorSuggestWrap" class="hidden rounded-2xl border border-slate-200 overflow-hidden">
+              <div class="max-h-40 overflow-auto no-scrollbar divide-y divide-slate-100" id="majorSuggest"></div>
+            </div>
+
+            <div class="rounded-2xl border border-slate-200 p-4">
+              <div class="text-sm font-semibold">Recommendation controls</div>
+              <div class="text-xs text-slate-500">Tune the “vibe” without changing your interests.</div>
+
+              <div class="mt-3 space-y-3">
+                <label class="flex items-start justify-between gap-3">
+                  <div>
+                    <div class="text-sm font-medium">Prefer active orgs</div>
+                    <div class="text-xs text-slate-500">Light boost using activity signals.</div>
+                  </div>
+                  <input id="preferActive" type="checkbox" class="mt-1 h-4 w-4 rounded border-slate-300" checked>
+                </label>
+
+                <label class="flex items-start justify-between gap-3">
+                  <div>
+                    <div class="text-sm font-medium">Show “Why this?”</div>
+                    <div class="text-xs text-slate-500">Adds 1–3 short reasons per recommendation.</div>
+                  </div>
+                  <input id="showWhy" type="checkbox" class="mt-1 h-4 w-4 rounded border-slate-300" checked>
+                </label>
+
+                <label class="flex items-start justify-between gap-3">
+                  <div>
+                    <div class="text-sm font-medium">Debug breakdown</div>
+                    <div class="text-xs text-slate-500">Show scoring components (for testing).</div>
+                  </div>
+                  <input id="debug" type="checkbox" class="mt-1 h-4 w-4 rounded border-slate-300">
+                </label>
+
+                <label class="flex items-start justify-between gap-3">
+                  <div>
+                    <div class="text-sm font-medium">Explain my picks</div>
+                    <div class="text-xs text-slate-500">Show a conversational explanation for why each club was picked and how the Top 5 was stacked.</div>
+                  </div>
+                  <input id="showReasoning" type="checkbox" class="mt-1 h-4 w-4 rounded border-slate-300" checked>
+                </label>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <button id="btnGet" class="flex-1 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700 shadow-soft">
+                Get recommendations
+              </button>
+              <button id="btnSurprise" class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm hover:bg-slate-50">
+                Surprise me
+              </button>
+            </div>
+
+            <div class="flex flex-wrap gap-2 pt-2">
+              <span class="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600">Account</span>
+              <span class="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600">School</span>
+              <span class="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600">Academics</span>
+              <span class="rounded-full bg-blue-600 px-3 py-1.5 text-xs text-white">Interests</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="lg:col-span-8">
+        <div class="rounded-3xl border border-slate-200 bg-white shadow-soft overflow-hidden">
+          <div class="p-5 border-b border-slate-200 bg-white">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <div class="text-sm text-slate-500">Your results</div>
+                <div class="text-2xl font-semibold">Recommended clubs</div>
+              </div>
+              <div class="flex items-center gap-3">
+                <input id="search" class="w-52 sm:w-64 rounded-2xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-4 focus:ring-blue-100" placeholder="Search results..." />
+                <select id="sort" class="rounded-2xl border border-slate-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-4 focus:ring-blue-100">
+                  <option value="best">Sort: Best match</option>
+                  <option value="activity">Sort: Most active</option>
+                  <option value="major">Sort: Major relevance</option>
+                  <option value="az">Sort: A → Z</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="mt-4 flex items-center justify-between gap-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <span id="matchCount" class="rounded-full bg-blue-50 px-3 py-1.5 text-xs text-blue-700 border border-blue-100">0 matches</span>
+                <span id="profilePill" class="rounded-full bg-slate-50 px-3 py-1.5 text-xs text-slate-700 border border-slate-200">—</span>
+              </div>
+              <button id="btnResetResults" class="text-sm text-blue-600 hover:underline">Reset</button>
+            </div>
+          </div>
+              <div id="coverageBanner" class="hidden mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <div class="font-semibold">Missing something?</div>
+                <div id="coverageBannerText" class="mt-1 text-amber-800"></div>
+              </div>
+              <div id="reasoningPanel" class="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="font-semibold">Why these picks?</div>
+                  <button id="btnCopyReasoning" class="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs hover:bg-slate-50">Copy</button>
+                </div>
+                <div id="reasoningText" class="mt-2 space-y-2"></div>
+              </div>
+
+
+
+          <div class="p-5">
+            <div>
+              <div>
+                <div class="text-sm font-semibold">Recommended</div>
+                <div class="text-xs text-slate-500">Top picks for you (includes at least one major-related org when available)</div>
+              </div>
+              <div id="recommended" class="mt-3 space-y-4"></div>
+            </div>
+
+            <div id="emptyState" class="hidden mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              No matches found with the current filters. Try:
+              <ul class="mt-2 list-disc ml-5 text-slate-600">
+                <li>Adding more interests</li>
+                <li>Turning on “Open” for Faith/Identity</li>
+                <li>Clearing search</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div id="modal" class="hidden fixed inset-0 z-50">
+    <div class="absolute inset-0 bg-slate-900/40"></div>
+    <div class="relative mx-auto max-w-lg px-4 py-10">
+      <div class="rounded-3xl bg-white border border-slate-200 shadow-card overflow-hidden">
+        <div class="p-5 border-b border-slate-200 flex items-center justify-between">
+          <div id="modalTitle" class="font-semibold">Details</div>
+          <button id="modalClose" class="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm hover:bg-slate-50">Close</button>
+        </div>
+        <div id="modalBody" class="p-5 text-sm text-slate-700"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = "https://sheet2api.com/v1/Y6ffm9keQbKC/enriched_platform_listings";
+    const INTERESTS = [{"ux": "Academic", "theme": "Academic", "hex": "#2563EB", "notes": "Academic clubs, honor societies, discipline-focused"}, {"ux": "Professional Development", "theme": "Professional Development", "hex": "#0EA5E9", "notes": "Career, networking, pre-professional"}, {"ux": "Cultural & Identity", "theme": "Cultural / Identity-Based", "hex": "#F59E0B", "notes": "Identity-centered orgs (ethnic, intl, affinity)"}, {"ux": "Faith & Spirituality", "theme": "Religious / Spiritual", "hex": "#7C3AED", "notes": "All faith-based or spiritual orgs"}, {"ux": "Service & Volunteering", "theme": "Service / Volunteering", "hex": "#10B981", "notes": "Community service, volunteering, philanthropy"}, {"ux": "Political & Activism", "theme": "Political / Activism", "hex": "#EF4444", "notes": "Advocacy, politics, activism"}, {"ux": "Arts & Media", "theme": "Arts & Media", "hex": "#EC4899", "notes": "Creative, performance, media, design"}, {"ux": "Sports & Athletics", "theme": "Sports & Athletics", "hex": "#F97316", "notes": "Competitive sports & athletics"}, {"ux": "Recreational / Social", "theme": "Recreational", "hex": "#22C55E", "notes": "Social, casual, hobby-based orgs"}];
+    const MAJORS = ["💸 Accounting", "📊 Actuarial Science", "⌚ Advertising and PR", "🚀 Aerospace Engineering", "🌱 Agricultural Economics", "🚜 Agricultural Engineering", "🌱 Agriculture", "🌾 Agriculture Production and Mgmt", "🐼 Animal Sciences", "💯 Applied Mathematics", "🏢 Architectural Engineering", "🏢 Architecture", "🎨 Art and Music Edu", "⚗️ Biochemical Sciences", "⚗️ Biological Engineering", "🔬 Biology", "⚕️ Biomedical Engineering", "🧬 Biomedical Sciences", "🧬 Biophysics", "🌿 Botany", "🧑‍💼 Business Analytics", "💼 Business Management", "💼 Business and Managerial Economics", "💰 Business and Marketing", "💸 Business and Quantitative Economics", "⚙️ Chemical Engineering", "🧪 Chemistry", "🧑‍⚕️ Child and Family Studies", "👩‍⚕️ Clinical Psychology", "💻 Computer Engineering", "💻 Computer Programming", "💻 Computer Science", "📣 Communication Studies", "🗣️ Communications", "🧑‍🌾 Community and Public Health", "🧱 Construction Services", "🧮 Critical Information Science", "🏛️ Criminal Justice", "🧬 Cognitive Science and Biopsychology", "🧠 Cognitive Science", "🍴 Culinary Arts", "🦷 Dental Hygiene", "🦷 Dentistry", "💎 Diamond Science", "🌍 Earth Sciences", "📚 Early Childhood Education", "💡 Economics", "🧑‍🏫 Education Administration and Supervision", "🧑‍🏫 Education", "🏭 Electrical Engineering", "🎓 Elementary Education", "🔧 Engineering Mechanics", "⚙️ Engineering and Business", "🔧 Engineering", "🌎 English Language and Literature", "✍️ English Literature", "🌿 Environmental Science", "🌿 Environmental Studies", "🧑‍🌾 Family and Consumer Sciences", "🧯 Fire Protection Services", "🐟 Fishery Sciences", "📈 Finance", "🍽️ Food Science", "🧑‍🌾 Forestry", "🎬 Film and Video Studies", "🌐 Foreign Language Education", "🌐 Foreign Languages", "🧠 General Psychology", "🎓 General Education", "🧠 General Social Sciences", "🧬 Genetics", "🌍 Geography", "🌋 Geology", "🌎 Geoscience", "🏥 Health Administration", "🧑‍⚕️ Health Sciences", "🧑‍⚕️ Health and Medical Administrative Services", "🧬 Health and Medical Sciences", "🧑‍⚕️ Health and Social Services", "🧑‍⚕️ Health", "📜 History", "🏨 Hospitality and Tourism", "🏥 Human Resources and Personnel Management", "🧍 Human Services", "🧩 Human Development and Family Studies", "🧠 Human Biology", "🧪 Human Nutrition", "🌱 Horticulture", "💡 Industrial Engineering", "🏭 Industrial Production Technologies", "📡 Information Science", "📰 Information Systems", "🌐 Information Technology", "🧑‍⚖️ International Business", "🤌 International Relations", "🌍 International Studies", "🎥 Journalism", "⚖️ Judicial Systems", "🧑‍⚕️ Kinesiology and Exercise Science", "🔧 Liberal Arts", "🧑‍⚖️ Legal Studies", "🗣️ Linguistics", "🗣️ Linguistics and Comparative Language and Literature", "🛒 Logistics and Ecommerce", "⚓ Marine Engineering", "🏷️ Marketing", "📐 Mathematics", "🏥 Medical Assisting Services", "🧑‍⚕️ Medical Science", "🧠 Mental Health", "⚙️ Mechanical Engineering", "🧪 Microbiology", "🎼 Music", "🧠 Neuroscience", "🧑‍⚕️ Nursing", "🏥 Nutrition and Food Sciences", "🧬 Nutrition Sciences", "🏥 Occupational Therapy", "🧠 Organizational Behavior Studies", "👶 Pediatrics", "🏥 Pharmacy", "🧑‍⚕️ Physical Therapy", "⚛️ Physics", "🌿 Plant Science", "🏛️ Political Science", "💻 Programming Languages", "🧠 Psychiatry", "🧑‍⚕️ Public Health", "📢 Public Relations", "🧠 Psychology", "📚 Reading Education", "🧑‍🔬 Research and Experimental Psychology", "🏥 Respiratory Therapy", "🧑‍⚕️ Rehabilitation Services", "📚 Secondary Education", "🧪 Science and Technology Studies", "🧑‍⚕️ Social Work", "🗣️ Speech and Hearing Sciences", "🧠 Sociology", "🧠 Special Education", "🧪 Sport and Fitness Administration", "🏟️ Sports Management", "🧑‍⚕️ Sports Medicine", "🧑‍⚕️ Sports Sciences", "🏋️ Sports and Exercise Science", "🧠 Statistics", "📈 Statistics and Data Science", "🎨 Studio Arts", "🎒 Teacher Edu", "⛪ Theology", "🚈 Transportation Sciences", "🤗 Treatment Therapy Professions", "🗽 US History", "🐶 Veterinary Medicine", "🎭 Visual and Performing Arts", "🐯 Zoology"];
+
+    const state = {
+      data: null,
+      interests: new Set(),
+      themes: new Set(),
+      year: "",
+      majorDisplay: "",
+      majorKey: "",
+      preferActive: true,
+      showWhy: true,
+      debug: false,
+      showReasoning: true,
+      buildLog: null,
+      wantsFaith: false,
+      wantsIdentity: false,
+      faithOptions: [],
+      identityOptions: [],
+      faithSelected: new Set(),
+      identitySelected: new Set(),
+      faithOpen: false,
+      identityOpen: false,
+      scored: [],
+      recommended: [],
+      search: "",
+      sort: "best",
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    function openModal(title, html) {
+      $("modalTitle").textContent = title;
+      $("modalBody").innerHTML = html;
+      $("modal").classList.remove("hidden");
+    }
+    function closeModal() {
+      $("modal").classList.add("hidden");
+    }
+    $("modalClose").addEventListener("click", closeModal);
+    $("modal").addEventListener("click", (e) => {
+      if (e.target === $("modal") || e.target.classList.contains("bg-slate-900/40")) closeModal();
+    });
+
+    $("btnWhat").addEventListener("click", () => {
+      openModal("What is this?", `
+        <div class="space-y-2">
+          <p>This is a UI/UX prototype for ActivityHub’s recommender.</p>
+          <ul class="list-disc ml-5 text-slate-600 space-y-1">
+            <li>Interests map to the API’s <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs">theme</code>.</li>
+            <li>Year adjusts emphasis (explore vs career/leadership).</li>
+            <li>Major boosts Academic/Professional orgs via <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs">associated_majors</code>.</li>
+            <li>Guardrails: if you pick Faith/Cultural, you must specify communities (or choose Open).</li>
+            <li>Guarantee: at least <b>one</b> recommended org is related to your major (when possible).</li>
+          </ul>
+        </div>
+      `);
+    });
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+    }
+
+    // Interests pills
+    function renderInterestPills() {
+      const root = $("interestPills");
+      root.innerHTML = "";
+      INTERESTS.forEach(item => {
+        const selected = state.interests.has(item.ux);
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "rounded-2xl border px-3 py-2.5 text-sm text-left hover:bg-slate-50 transition";
+        btn.style.borderColor = selected ? item.hex : "#e2e8f0";
+        btn.style.boxShadow = selected ? ("0 0 0 3px " + item.hex + "22") : "none";
+        btn.innerHTML = `<span class="font-medium">${escapeHtml(item.ux)}</span>`;
+        btn.addEventListener("click", () => {
+          if (state.interests.has(item.ux)) {
+            state.interests.delete(item.ux);
+            state.themes.delete(item.theme);
+          } else {
+            state.interests.add(item.ux);
+            state.themes.add(item.theme);
+          }
+          state.wantsFaith = state.interests.has("Faith & Spirituality");
+          state.wantsIdentity = state.interests.has("Cultural & Identity");
+          maybeShowRefine();
+      renderReasoning();
+          renderInterestPills();
+          updateProfilePill();
+        });
+        root.appendChild(btn);
+      });
+    }
+
+    $("btnClearInterests").addEventListener("click", () => {
+      state.interests.clear();
+      state.themes.clear();
+      state.wantsFaith = false;
+      state.wantsIdentity = false;
+      state.faithSelected.clear();
+      state.identitySelected.clear();
+      state.faithOpen = false;
+      state.identityOpen = false;
+      maybeShowRefine();
+      renderInterestPills();
+      updateProfilePill();
+      clearResults();
+    });
+
+    // Major autocomplete
+    function normalizeMajorLabel(label) {
+      try {
+        return label.replace(/^\p{Extended_Pictographic}\s*/u, "").replace(/^\p{Emoji}\s*/u, "").trim();
+      } catch {
+        return label.replace(/^[^A-Za-z0-9]+\s*/, "").trim();
+      }
+    }
+
+    function setMajor(v) {
+      const clean = normalizeMajorLabel(v);
+      state.majorDisplay = clean;
+      state.majorKey = clean.toLowerCase();
+      $("majorInput").value = clean;
+      $("majorSuggestWrap").classList.add("hidden");
+      updateProfilePill();
+    }
+
+    function renderMajorSuggest(q) {
+      const wrap = $("majorSuggestWrap");
+      const list = $("majorSuggest");
+      const query = (q || "").trim().toLowerCase();
+      if (!query) { wrap.classList.add("hidden"); return; }
+      const matches = MAJORS.map(m => normalizeMajorLabel(m)).filter(m => m.toLowerCase().includes(query)).slice(0, 10);
+      if (!matches.length) { wrap.classList.add("hidden"); return; }
+      list.innerHTML = "";
+      matches.forEach(m => {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 flex items-center justify-between";
+        row.innerHTML = `<span class="truncate">${escapeHtml(m)}</span><span class="text-xs text-slate-500">Select</span>`;
+        row.addEventListener("click", () => setMajor(m));
+        list.appendChild(row);
+      });
+      wrap.classList.remove("hidden");
+    }
+
+    $("majorInput").addEventListener("input", (e) => {
+      state.majorDisplay = e.target.value.trim();
+      state.majorKey = state.majorDisplay.toLowerCase();
+      renderMajorSuggest(state.majorDisplay);
+      updateProfilePill();
+    });
+
+    $("yearSelect").addEventListener("change", (e) => {
+      state.year = e.target.value;
+      updateProfilePill();
+    });
+
+    $("preferActive").addEventListener("change", (e) => state.preferActive = e.target.checked);
+    $("showWhy").addEventListener("change", (e) => { state.showWhy = e.target.checked; renderResults(); });
+    $("debug").addEventListener("change", (e) => { state.debug = e.target.checked; renderResults(); });
+
+    // Data loading
+    async function loadData(force=false) {
+      const key = "ah_mock_cache_v3";
+      const ttl = 10 * 60 * 1000;
+      if (!force) {
+        try {
+          const cached = JSON.parse(localStorage.getItem(key) || "null");
+          if (cached && cached.data && cached.at && (Date.now() - cached.at) < ttl) {
+            state.data = cached.data;
+            return state.data;
+          }
+        } catch {}
+      }
+      const res = await fetch(API_URL, { cache: "no-store" });
+      if (!res.ok) throw new Error("API request failed: " + res.status);
+      const data = await res.json();
+      state.data = Array.isArray(data) ? data : [];
+      localStorage.setItem(key, JSON.stringify({ data: state.data, at: Date.now() }));
+      return state.data;
+    }
+
+    $("btnReload").addEventListener("click", async () => {
+      try {
+        await loadData(true);
+        if (state.wantsFaith || state.wantsIdentity) await buildRefineOptions();
+        rerun();
+      } catch (e) {
+        openModal("Reload failed", `<div class="text-red-700">${escapeHtml(e.message || String(e))}</div>`);
+      }
+    });
+
+    // Domain tag parsing + refine
+    function extractTagsFromDomain(domainStr) {
+      const tags = { faith: [], identity: [] };
+      const s = (domainStr || "").toString();
+      const parts = s.split(",").map(x => x.trim()).filter(Boolean);
+      for (const t of parts) {
+        const lower = t.toLowerCase();
+        if (lower.startsWith("faith:")) {
+          const v = t.split(":").slice(1).join(":").trim();
+          if (v) tags.faith.push(v);
+        }
+        if (lower.startsWith("identity:")) {
+          let v = t.split(":").slice(1).join(":").trim();
+          const m = v.match(/^Other\((.*)\)$/i);
+          if (m && m[1]) v = m[1].trim();
+          if (v) tags.identity.push(v);
+        }
+      }
+      return tags;
+    }
+
+    function buildFaithIdentityOptionsFromData(data) {
+      const faithSet = new Set();
+      const identitySet = new Set();
+      for (const entry of data) {
+        const tags = extractTagsFromDomain(entry.domain);
+        tags.faith.forEach(f => faithSet.add(f));
+        tags.identity.forEach(i => identitySet.add(i));
+      }
+      state.faithOptions = Array.from(faithSet).sort((a,b)=>a.localeCompare(b));
+      state.identityOptions = Array.from(identitySet).sort((a,b)=>a.localeCompare(b));
+    }
+
+    async function buildRefineOptions() {
+      $("refineWrap").classList.remove("hidden");
+      $("refineLoading").classList.remove("hidden");
+      $("refineBody").classList.add("hidden");
+      const data = state.data || await loadData(false);
+      buildFaithIdentityOptionsFromData(data);
+      renderRefine();
+      $("refineLoading").classList.add("hidden");
+      $("refineBody").classList.remove("hidden");
+    }
+
+    function maybeShowRefine() {
+      const show = state.wantsFaith || state.wantsIdentity;
+      $("refineWrap").classList.toggle("hidden", !show);
+      if (!show) return;
+      if (state.data) {
+        buildFaithIdentityOptionsFromData(state.data);
+        renderRefine();
+        $("refineLoading").classList.add("hidden");
+        $("refineBody").classList.remove("hidden");
+      } else {
+        $("refineLoading").classList.remove("hidden");
+        $("refineBody").classList.add("hidden");
+      }
+    }
+
+    function renderTagButtons(kind, options, selectedSet, openFlagId) {
+      const root = kind === "faith" ? $("faithTags") : $("identityTags");
+      root.innerHTML = "";
+      options.forEach(val => {
+        const selected = selectedSet.has(val);
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm hover:bg-slate-50";
+        if (selected) btn.classList.add("bg-slate-900","text-white","border-slate-900");
+        btn.textContent = val;
+        btn.disabled = $(openFlagId).checked;
+        btn.classList.toggle("opacity-50", $(openFlagId).checked);
+        btn.addEventListener("click", () => {
+          if (selectedSet.has(val)) selectedSet.delete(val);
+          else selectedSet.add(val);
+          renderRefine();
+        });
+        root.appendChild(btn);
+      });
+    }
+
+    function renderRefine() {
+      $("faithBox").classList.toggle("hidden", !state.wantsFaith);
+      $("identityBox").classList.toggle("hidden", !state.wantsIdentity);
+      $("faithOpen").checked = state.faithOpen;
+      $("identityOpen").checked = state.identityOpen;
+      renderTagButtons("faith", state.faithOptions, state.faithSelected, "faithOpen");
+      renderTagButtons("identity", state.identityOptions, state.identitySelected, "identityOpen");
+    }
+
+    $("faithOpen").addEventListener("change", (e) => {
+      state.faithOpen = e.target.checked;
+      if (state.faithOpen) state.faithSelected.clear();
+      renderRefine();
+    });
+    $("identityOpen").addEventListener("change", (e) => {
+      state.identityOpen = e.target.checked;
+      if (state.identityOpen) state.identitySelected.clear();
+      renderRefine();
+    });
+
+    // Scoring
+    function parseAssociatedMajors(str) {
+      const out = {};
+      if (!str || typeof str !== "string") return out;
+      const parts = str.split(",").map(s => s.trim()).filter(Boolean);
+      for (const p of parts) {
+        const m = p.match(/^(.*?)(?:\s*\((\d+(?:\.\d+)?)%\))?$/);
+        if (!m) continue;
+        const name = (m[1] || "").trim();
+        const pct = m[2] ? Number(m[2]) / 100 : 0.0;
+        if (!name) continue;
+        out[name.toLowerCase()] = isFinite(pct) ? pct : 0.0;
+      }
+      return out;
+    }
+
+    function isVerified(entry) {
+      const v = (entry.verified || "").toString().toLowerCase();
+      return v === "yes" || v === "true";
+    }
+
+    function activityScore(entry) {
+      const n = Number(entry.activity_score);
+      return isFinite(n) ? n : 0;
+    }
+
+    const IDENTITY_KEYWORDS = [
+      "black","african","latino","latina","hispanic","asian",
+      "jewish","muslim","islam","christian","catholic","hindu","sikh","orthodox","coptic",
+      "bengali","albanian","caribbean","filipino","korean","chinese","pakistani","bangladeshi",
+      "naba","alpfa"
+    ];
+
+    function isIdentityAffiliated(entry) {
+      const tags = extractTagsFromDomain(entry.domain);
+      if (tags.faith.length || tags.identity.length) return true;
+      const n = (entry.name || "").toString().toLowerCase();
+      return IDENTITY_KEYWORDS.some(k => n.includes(k));
+    }
+
+    function yearWeights(year) {
+      const base = { career: 1.0, explore: 1.0 };
+      switch ((year || "").toLowerCase()) {
+        case "freshman": return {...base, career: 0.85, explore: 1.20};
+        case "sophomore": return {...base, career: 1.00, explore: 1.05};
+        case "junior": return {...base, career: 1.25, explore: 0.95};
+        case "senior": return {...base, career: 1.35, explore: 0.90};
+        case "graduate": return {...base, career: 1.40, explore: 0.85};
+        default: return base;
+      }
+    }
+
+    function majorRelated(entry) {
+      const theme = (entry.theme || "").toString();
+      const careerTheme = theme === "Academic" || theme === "Professional Development";
+      if (!careerTheme) return { ok:false, rel:0, reason:"" };
+
+      const amap = parseAssociatedMajors(entry.associated_majors || "");
+      const rel = state.majorKey ? (amap[state.majorKey] || 0) : 0;
+
+      const name = (entry.name || "").toString().toLowerCase();
+      const majorWord = (state.majorDisplay || "").toString().toLowerCase();
+      const nameHit = majorWord && majorWord.length >= 4 && name.includes(majorWord);
+
+      const ok = (rel > 0) || nameHit;
+
+      let reason = "";
+      if (rel > 0 && state.majorDisplay) reason = `it’s tagged as related to ${state.majorDisplay}`;
+      else if (nameHit && state.majorDisplay) reason = `its name mentions ${state.majorDisplay}`;
+
+      return { ok, rel: rel || (nameHit ? 0.10 : 0), reason };
+    }
+
+    function computeScore(entry) {
+      const why = [];
+      const dbg = {};
+      let score = 0;
+
+      const theme = (entry.theme || "").toString();
+      const tags = extractTagsFromDomain(entry.domain);
+      const weights = yearWeights(state.year);
+      const isCareerTheme = theme === "Academic" || theme === "Professional Development";
+
+      if (!state.wantsFaith && tags.faith.length) return null;
+      if (!state.wantsIdentity && tags.identity.length) return null;
+
+      if (state.wantsFaith && theme === "Religious / Spiritual" && !state.faithOpen) {
+        const overlap = tags.faith.some(x => state.faithSelected.has(x));
+        if (!overlap) return null;
+      }
+      if (state.wantsIdentity && theme === "Cultural / Identity-Based" && !state.identityOpen) {
+        const overlap = tags.identity.some(x => state.identitySelected.has(x));
+        if (!overlap) return null;
+      }
+
+      if (isCareerTheme && isIdentityAffiliated(entry)) {
+        const okFaith = state.wantsFaith && (state.faithOpen || tags.faith.some(x => state.faithSelected.has(x)));
+        const okIdent = state.wantsIdentity && (state.identityOpen || tags.identity.some(x => state.identitySelected.has(x)));
+        if (!(okFaith || okIdent)) return null;
+      }
+
+      let interestPts = 0;
+      if (state.themes.has(theme)) {
+        interestPts = (isCareerTheme ? 55 : 45) * (isCareerTheme ? weights.career : weights.explore);
+        score += interestPts;
+        const ux = INTERESTS.find(x => x.theme === theme)?.ux || theme;
+        why.push(`Matches your interests: ${ux}`);
+      } else {
+        score += 4;
+      }
+      dbg.interestPts = interestPts;
+
+      let majorPts = 0;
+      let relPct = 0;
+      if (isCareerTheme && state.majorKey) {
+        const m = majorRelated(entry);
+        relPct = m.rel || 0;
+        if (m.ok) {
+          majorPts = (relPct * 60) * weights.career;
+          score += majorPts;
+          why.push(`Good for your major (${state.majorDisplay})`);
+        }
+      }
+      dbg.majorPts = majorPts;
+      dbg.majorRel = relPct;
+
+      if (isCareerTheme && weights.career >= 1.2) why.push(`Strong for ${state.year}s (career + leadership)`);
+      else if (!isCareerTheme && weights.explore >= 1.15) why.push(`Great for ${state.year}s (explore + community)`);
+
+      let activePts = 0;
+      if (state.preferActive) {
+        const a = activityScore(entry);
+        if (a) {
+          activePts = Math.min(12, a * 2);
+          score += activePts;
+          if (a >= 4) why.push("Looks active (high confidence)");
+        }
+      }
+      dbg.activePts = activePts;
+
+      let verifiedPts = 0;
+      if (isVerified(entry)) {
+        verifiedPts = 6;
+        score += verifiedPts;
+        why.push("Verified");
+      }
+      dbg.verifiedPts = verifiedPts;
+
+      return { entry, score, why: why.slice(0,3), dbg };
+    }
+
+    // Search/sort and guarantee
+    function applySearchAndSort(list) {
+      const q = (state.search || "").trim().toLowerCase();
+      let out = list;
+      if (q) {
+        out = out.filter(x => {
+          const e = x.entry;
+          const blob = `${e.name||""} ${e.tagline||""} ${e.description_preview||""} ${e.domain||""}`.toLowerCase();
+          return blob.includes(q);
+        });
+      }
+      const sort = state.sort || "best";
+      if (sort === "best") out = out.slice().sort((a,b)=>b.score-a.score);
+      else if (sort === "activity") out = out.slice().sort((a,b)=> (activityScore(b.entry)-activityScore(a.entry)) || (b.score-a.score));
+      else if (sort === "major") out = out.slice().sort((a,b)=> (b.dbg.majorRel-a.dbg.majorRel) || (b.score-a.score));
+      else if (sort === "az") out = out.slice().sort((a,b)=> String(a.entry.name||"").localeCompare(String(b.entry.name||"")));
+      return out;
+    }
+
+    function enforceMajorGuarantee(scoredList, topN=5) {
+      const top = scoredList.slice(0, topN);
+      const hasMajor = top.some(x => majorRelated(x.entry).ok);
+      if (hasMajor) return top;
+      const candidate = scoredList.find(x => majorRelated(x.entry).ok);
+      if (!candidate) return top;
+      const replaced = top.slice(0, Math.max(0, topN-1)).concat([candidate]);
+      const seen = new Set();
+      const unique = [];
+      for (const x of replaced) {
+        const k = (x.entry.name||"").toString().toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        unique.push(x);
+      }
+      return unique.slice(0, topN);
+    }
+
+    
+    function matchesFaithPrefs(entry) {
+      const tags = extractTagsFromDomain(entry.domain);
+      const isFaithish = (String(entry.theme || "") === "Religious / Spiritual") || (tags.faith && tags.faith.length);
+      if (!state.wantsFaith) return false;
+      if (state.faithOpen) return isFaithish;
+      return tags.faith.some(x => state.faithSelected.has(x));
+    }
+
+    function matchesIdentityPrefs(entry) {
+      const tags = extractTagsFromDomain(entry.domain);
+      const isIdentityish = (String(entry.theme || "") === "Cultural / Identity-Based") || (tags.identity && tags.identity.length);
+      if (!state.wantsIdentity) return false;
+      if (state.identityOpen) return isIdentityish;
+      return tags.identity.some(x => state.identitySelected.has(x));
+    }
+
+    
+    function stageMode() {
+      const y = (state.year || "").toLowerCase();
+      if (["junior","senior","graduate"].includes(y)) return "career_first";
+      if (["freshman","sophomore"].includes(y)) return "explore_first";
+      return "balanced";
+    }
+
+    function bestMajorAnchor(ordered) {
+      return ordered.find(x => majorRelated(x.entry).ok) || null;
+    }
+
+    function bestPayoff(ordered) {
+      const faithPick = state.wantsFaith ? (ordered.find(x => matchesFaithPrefs(x.entry)) || null) : null;
+      const identPick = state.wantsIdentity ? (ordered.find(x => matchesIdentityPrefs(x.entry)) || null) : null;
+      return { faithPick, identPick };
+    }
+
+    function selectWithVariety(ordered, topN=5) {
+      const chosen = [];
+      const used = new Set();
+
+      const add = (item) => {
+        if (!item) return false;
+        const key = (item.entry.name || "").toString().toLowerCase();
+        if (!key || used.has(key)) return false;
+        chosen.push(item);
+        used.add(key);
+        return true;
+      };
+
+      const mode = stageMode();
+      const majorAnchor = bestMajorAnchor(ordered);
+      const { faithPick, identPick } = bestPayoff(ordered);
+
+      const primaryPayoff = faithPick || identPick || null;
+      const secondaryPayoff = (faithPick && identPick) ? (faithPick === primaryPayoff ? identPick : faithPick) : null;
+
+      // --- Slotting rules (stacking policy) ---
+      // Career-first (Junior/Senior/Graduate):
+      //   1/5 Major + career anchor (if available)
+      //   2/5 Extra-step payoff (faith/identity) (if available)
+      // Explore-first (Freshman/Sophomore):
+      //   1/5 Extra-step payoff
+      //   2/5 Major anchor
+      // Balanced:
+      //   If user did extra step, keep payoff in top 2; otherwise major first (if available)
+      if (mode === "career_first") {
+        add(majorAnchor) || add(primaryPayoff) || add(ordered[0]);
+        if (chosen.length < topN) add(primaryPayoff) || add(secondaryPayoff) || add(ordered.find(x => !used.has((x.entry.name||"").toString().toLowerCase())));
+      } else if (mode === "explore_first") {
+        add(primaryPayoff) || add(majorAnchor) || add(ordered[0]);
+        if (chosen.length < topN) add(majorAnchor) || add(secondaryPayoff) || add(ordered.find(x => !used.has((x.entry.name||"").toString().toLowerCase())));
+      } else {
+        if (primaryPayoff) {
+          add(primaryPayoff) || add(majorAnchor) || add(ordered[0]);
+          if (chosen.length < topN) add(majorAnchor) || add(secondaryPayoff);
+        } else {
+          add(majorAnchor) || add(ordered[0]);
+        }
+      }
+
+      // If both payoff types exist, try to include the second payoff early (slot 3)
+      if (chosen.length < topN && secondaryPayoff) add(secondaryPayoff);
+
+      // --- Variety across selected themes (one per interest) ---
+      const selectedThemes = Array.from(state.themes);
+      for (const t of selectedThemes) {
+        if (chosen.length >= topN) break;
+        const pick = ordered.find(x =>
+          String(x.entry.theme || "") === String(t) &&
+          !used.has((x.entry.name||"").toString().toLowerCase())
+        );
+        add(pick);
+      }
+
+      // --- Fill remainder by best overall ---
+      for (const x of ordered) {
+        if (chosen.length >= topN) break;
+        add(x);
+      }
+
+      return chosen.slice(0, topN);
+    }
+
+    function enforceMajorGuaranteeOnChosen(chosen, ordered, topN=5) {
+      const hasMajor = chosen.some(x => majorRelated(x.entry).ok);
+      if (hasMajor) return chosen.slice(0, topN);
+
+      const candidate = ordered.find(x => majorRelated(x.entry).ok);
+      if (!candidate) return chosen.slice(0, topN);
+
+      const key = (candidate.entry.name || "").toString().toLowerCase();
+      const exists = chosen.some(x => (x.entry.name||"").toString().toLowerCase() === key);
+      if (exists) return chosen.slice(0, topN);
+
+      // Keep top-slot intent intact: replace LAST slot if full.
+      const out = chosen.slice(0, topN);
+      if (out.length < topN) out.push(candidate);
+      else out[out.length - 1] = candidate;
+      return out.slice(0, topN);
+    }
+
+
+    function updateCoverageBanner(ordered, chosen) {
+      const msgs = [];
+
+      if (state.wantsFaith) {
+        const hasFaith = chosen.some(x => matchesFaithPrefs(x.entry));
+        if (!hasFaith) {
+          const anyFaith = ordered.some(x => (extractTagsFromDomain(x.entry.domain).faith || []).length || String(x.entry.theme||"") === "Religious / Spiritual");
+          if (!anyFaith) msgs.push("We couldn’t find any faith-tagged orgs in the data right now.");
+          else msgs.push("No matches found for your selected faith community. Try selecting “Open” or add another faith to widen results.");
+        }
+      }
+
+      if (state.wantsIdentity) {
+        const hasIdentity = chosen.some(x => matchesIdentityPrefs(x.entry));
+        if (!hasIdentity) {
+          const anyIdent = ordered.some(x => (extractTagsFromDomain(x.entry.domain).identity || []).length || String(x.entry.theme||"") === "Cultural / Identity-Based");
+          if (!anyIdent) msgs.push("We couldn’t find any identity-tagged orgs in the data right now.");
+          else msgs.push("No matches found for your selected identity community. Try selecting “Open” or choose more communities to widen results.");
+        }
+      }
+
+      const el = $("coverageBanner");
+      const txt = $("coverageBannerText");
+      if (!msgs.length) {
+        el.classList.add("hidden");
+        txt.textContent = "";
+      } else {
+        el.classList.remove("hidden");
+        txt.innerHTML = msgs.map(m => `<div>• ${escapeHtml(m)}</div>`).join("");
+      }
+    }
+
+    
+    function computeRoleForSlot(item, index) {
+      const e = item.entry || {};
+      if (majorRelated(e).ok) return "Major + career anchor";
+      if (matchesFaithPrefs(e)) return "Faith payoff";
+      if (matchesIdentityPrefs(e)) return "Identity payoff";
+      const t = String(e.theme || "");
+      const themeMap = {
+        "Academic": "Academic",
+        "Professional Development": "Professional Development",
+        "Cultural / Identity-Based": "Cultural & Identity",
+        "Religious / Spiritual": "Faith & Spirituality",
+        "Service / Volunteering": "Service & Volunteering",
+        "Political / Activism": "Political & Activism",
+        "Arts & Media": "Arts & Media",
+        "Sports & Athletics": "Sports & Athletics",
+        "Recreational": "Recreational / Social"
+      };
+      if (state.themes.has(t)) return `Interest match (${themeMap[t] || t})`;
+      return "Best overall";
+    }
+
+    function buildRecommended() {
+      const ordered = applySearchAndSort(state.scored);
+      let chosen = selectWithVariety(ordered, 5);
+      chosen = enforceMajorGuaranteeOnChosen(chosen, ordered, 5);
+      state.recommended = chosen;
+
+      const mode = stageMode();
+      let ruleSummary = "";
+      if (mode === "career_first") ruleSummary = "Slot #1 prioritizes major/career fit; Slot #2 prioritizes your refined faith/identity (if available).";
+      else if (mode === "explore_first") ruleSummary = "Slot #1 prioritizes your refined faith/identity (if available); Slot #2 prioritizes major/career fit.";
+      else ruleSummary = "Top slots prioritize your refined faith/identity and major fit when applicable, then fill with interest variety.";
+
+      const slots = (chosen || []).map((it, i) => {
+        const name = (it.entry?.name || "Untitled").toString();
+        const role = computeRoleForSlot(it, i);
+        const because = (it.why && it.why.length ? it.why[0] : "high score");
+        return { role, name, because };
+      });
+
+      state.buildLog = {
+        stageLabel: humanStageLabel(),
+        profileLine: shortProfileLine(),
+        narrative: stageStackNarrative(),
+        items: (chosen || []).map((it, idx) => ({
+          name: (it.entry?.name || "Untitled").toString(),
+          role: computeRoleForSlot(it, idx),
+          scoreLabel: (typeof it.score === "number" ? ("Score " + it.score) : ""),
+          reasons: whyForItem(it, idx)
+        }))
+      };
+
+      updateCoverageBanner(ordered, chosen);
+      renderReasoning();
+    }
+
+
+    // Card rendering (FIXES your "Faith pill on everything" issue)
+    function badge(text, cls="") {
+      return `<span class="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600 ${cls}">${escapeHtml(text)}</span>`;
+    }
+
+    // --- Tag label + emoji helpers (for domain chips) ---
+    function normalizeTagValue(kind, valueRaw) {
+      let v = (valueRaw || "").toString().trim();
+      if (!v) return "";
+
+      if (kind.toLowerCase() === "identity") {
+        const mm = v.match(/^Other\((.*)\)$/i);
+        if (mm && mm[1]) v = mm[1].trim();
+      }
+      // Clean common noise
+      v = v.replace(/^Other\(/i, "").replace(/\)$/,"").trim();
+      return v;
+    }
+
+        // --- Tag emoji mappings ---
+    // Canonical emoji source-of-truth for majors comes from MAJORS (dropdown list).
+    // We reuse those emojis anywhere a tag value matches a major label (Discipline + Industry).
+    const MAJOR_EMOJI_MAP = (() => {
+      const map = new Map();
+      for (const raw of (MAJORS || [])) {
+        const label = normalizeMajorLabel(raw);
+        const m = String(raw || "").trim().match(/^(\S+)\s+/); // first token is the emoji
+        if (!label || !m) continue;
+        map.set(label.toLowerCase(), m[1]);
+      }
+      return map;
+    })();
+
+    // Hardcoded tag emojis for non-major domains (and for values that won't exist in the major list).
+    // IMPORTANT: Identity "Other" must NOT use the people-holding-hands emoji — we use a map.
+    const TAG_EMOJIS = {
+      faith: {
+        "Catholicism": "⛪",
+        "Christianity": "⛪",
+        "Islam": "🕌",
+        "Judaism": "🕍",
+        "Hinduism": "🛕",
+        "Buddhism": "🛕",
+        "Sikhism": "🛕",
+        "Interfaith": "🤝",
+        "Spiritual / Non-denom": "✨",
+      },
+      identity: {
+        "African / African-American": "✊🏿",
+        "Latino / Hispanic": "🌎",
+        "South Asian": "🪷",
+        "East Asian": "🏮",
+        "Middle Eastern": "🧿",
+        "LGBTQ+": "🏳️‍🌈",
+        "First-Generation": "🎓",
+        "International Students": "🌍",
+        "Women-Focused": "♀️",
+        "Greek Life": "🏛️",
+        // Any "Other(...)" or uncategorized identity → map icon (requested)
+        "__OTHER__": "🗺️",
+      },
+      cause: {
+        "Community Service": "🤝",
+        "Social Justice": "✊",
+        "Environmental": "🌿",
+        "Public Health": "🏥",
+        "Education Access": "🎓",
+        "Advocacy": "📣",
+        "Human Rights": "🕊️",
+        "Civic Engagement": "🗳️",
+      },
+      activity: {
+        "Chess": "♟️",
+        "Board Games": "🎲",
+        "Gaming": "🎮",
+        "Esports": "🎮",
+        "Dance": "💃",
+        "Music": "🎵",
+        "Fitness": "🏋️",
+        "Martial Arts": "🥋",
+        "Outdoor Recreation": "🏞️",
+      },
+      // Industry + Discipline will try MAJOR_EMOJI_MAP first; these are just fallbacks.
+      industry: {
+        "Business": "💼",
+        "Finance": "💰",
+        "STEM": "🧪",
+        "Law": "⚖️",
+        "Healthcare": "🏥",
+        "Education": "🧑‍🏫",
+        "Media / Journalism": "🗞️",
+        "Government / Policy": "🏛️",
+        "Design / Creative": "🎨",
+      },
+      discipline: {
+        // Prefer MAJOR_EMOJI_MAP when possible
+        "Accounting": "💸",
+        "Finance": "💰",
+        "Computer Science": "💻",
+        "Statistics": "📈",
+        "Data Science": "📈",
+      }
+    };
+
+    // Theme / interest emoji mapping (used for the theme pill shown on each card)
+    const THEME_EMOJIS = {
+      "Academic": "📚",
+      "Professional Development": "💼",
+      "Cultural & Identity": "🧭",
+      "Cultural / Identity-Based": "🧭",
+      "Faith & Spirituality": "🕊️",
+      "Religious / Spiritual": "🕊️",
+      "Service & Volunteering": "🤝",
+      "Service / Volunteering": "🤝",
+      "Political & Activism": "📣",
+      "Political / Activism": "📣",
+      "Arts & Media": "🎨",
+      "Sports & Athletics": "🏅",
+      "Recreational / Social": "🎯",
+      "Recreational": "🎯",
+    };
+
+    function emojiForTheme(themeOrUx) {
+      const key = (themeOrUx || "").toString().trim();
+      return THEME_EMOJIS[key] || "🏷️";
+    }
+
+
+    function emojiForTag(kind, value) {
+      const k = (kind || "").toString().trim().toLowerCase();
+      const vRaw = (value || "").toString().trim();
+      const v = vRaw.toLowerCase();
+
+      // 1) If the tag value matches a major label, reuse the major emoji (requirement).
+      // Applies mainly to Discipline + Industry, but harmless for others too.
+      const majorHit = MAJOR_EMOJI_MAP.get(vRaw.toLowerCase());
+      if (majorHit && (k === "discipline" || k === "industry")) return majorHit;
+
+      // 2) Exact hardcoded mapping by category (case-insensitive match)
+      const bucket = TAG_EMOJIS[k];
+      if (bucket) {
+        const exact = bucket[vRaw] || bucket[vRaw.replace(/\s+/g, " ").trim()];
+        if (exact) return exact;
+      }
+
+      // 3) Soft matching for common variants (keeps UI resilient when the API adds new values)
+      if (k === "faith") {
+        if (v.includes("islam") || v.includes("muslim")) return "🕌";
+        if (v.includes("jew")) return "🕍";
+        if (v.includes("catholic") || v.includes("christ")) return "⛪";
+        if (v.includes("hindu")) return "🛕";
+        if (v.includes("buddh")) return "🛕";
+        if (v.includes("sikh")) return "🛕";
+        if (v.includes("interfaith")) return "🤝";
+        return "🙏";
+      }
+
+      if (k === "identity") {
+        // Any Identity:Other(...) or unknown identity → map icon (requested)
+        return (TAG_EMOJIS.identity.__OTHER__ || "🗺️");
+      }
+
+      if (k === "cause") {
+        if (v.includes("environment")) return "🌿";
+        if (v.includes("health")) return "🏥";
+        if (v.includes("justice")) return "✊";
+        if (v.includes("rights")) return "🕊️";
+        if (v.includes("advoc")) return "📣";
+        if (v.includes("civic") || v.includes("vote")) return "🗳️";
+        return "🤝";
+      }
+
+      if (k === "activity") {
+        if (v.includes("chess")) return "♟️";
+        if (v.includes("board")) return "🎲";
+        if (v.includes("game") || v.includes("esport")) return "🎮";
+        if (v.includes("dance")) return "💃";
+        if (v.includes("music")) return "🎵";
+        if (v.includes("fitness") || v.includes("gym")) return "🏋️";
+        if (v.includes("martial")) return "🥋";
+        if (v.includes("outdoor") || v.includes("hike")) return "🏞️";
+        if (v.includes("theatre") || v.includes("theater") || v.includes("comedy")) return "🎭";
+        return "🎯";
+      }
+
+      if (k === "discipline") {
+        // If we didn't match a major label exactly, try a fuzzy match against major labels.
+        // Example: "Data Science" should still reuse "Statistics and Data Science" if that's what exists.
+        for (const [label, emo] of MAJOR_EMOJI_MAP.entries()) {
+          if (label === v) return emo;
+          if (label.includes(v) || v.includes(label)) return emo;
+        }
+        return "🎓";
+      }
+
+      if (k === "industry") {
+        // Try fuzzy match against majors too
+        for (const [label, emo] of MAJOR_EMOJI_MAP.entries()) {
+          if (label === v) return emo;
+          if (label.includes(v) || v.includes(label)) return emo;
+        }
+        const bucket2 = TAG_EMOJIS.industry || {};
+        const exact2 = bucket2[vRaw] || bucket2[vRaw.replace(/\s+/g, " ").trim()];
+        if (exact2) return exact2;
+        return "🏢";
+      }
+
+      return "🏷️";
+    }
+
+    function parseDomainTokens(domainStr) {
+      const s = (domainStr || "").toString();
+      const parts = s.split(",").map(x => x.trim()).filter(Boolean);
+      const out = [];
+      for (const raw of parts) {
+        // ActivityOther(Theatre) style
+        const act = raw.match(/^ActivityOther\((.*)\)$/i);
+        if (act && act[1]) {
+          out.push({ kind: "Activity", value: act[1].trim(), raw });
+          continue;
+        }
+        if (raw.includes(":")) {
+          const kind = raw.split(":")[0].trim();
+          const value = raw.split(":").slice(1).join(":").trim();
+          out.push({ kind, value: normalizeTagValue(kind, value), raw });
+          continue;
+        }
+        out.push({ kind: "Tag", value: raw, raw });
+      }
+      return out;
+    }
+
+    function renderDomainChips(domainStr, themeCanonical, max=3) {
+      const tokens = parseDomainTokens(domainStr);
+
+      const order = ["Discipline", "Industry", "Cause", "Faith", "Identity", "Activity", "Tag"];
+      tokens.sort((a,b) => order.indexOf(a.kind) - order.indexOf(b.kind));
+
+      const seen = new Set();
+      const chips = [];
+      for (const t of tokens) {
+        if (chips.length >= max) break;
+        const val = (t.value || "").toString().trim();
+        if (!val) continue;
+
+        // Avoid repeating the main theme chip text
+        if (themeCanonical && val.toLowerCase() === themeCanonical.toLowerCase()) continue;
+
+        const key = (t.kind + ":" + val).toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        const emo = emojiForTag(t.kind, val);
+        const label = (t.kind.toLowerCase() === "tag") ? val : val; // no prefixes in UI
+        chips.push(badge(`${emo} ${label}`.trim()));
+      }
+      return chips.join("");
+    }
+
+
+    function themeMeta(theme) {
+      return INTERESTS.find(x => x.theme === theme) || null;
+    }
+
+    function renderCard(item) {
+      const e = item.entry;
+      const logo = (e.logo_url || "").toString();
+      const title = (e.name || "Untitled").toString();
+      const school = (e.school || "").toString() || "St. John's University";
+      const theme = (e.theme || "").toString();
+      const tm = themeMeta(theme);
+      const themeChip = tm ? badge(`${emojiForTheme(tm.ux)} ${tm.ux}`, "bg-slate-50") : (theme ? badge(`${emojiForTheme(theme)} ${theme}`, "bg-slate-50") : "");
+
+      const subtitle = `${theme} • ${school}`;
+      const domain = (e.domain || "").toString();
+      const domainChips = domain ? renderDomainChips(domain, theme, 3) : "";
+
+      const scorePill = `<span class="ml-auto rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-700 border border-blue-100">Score ${Math.round(item.score)}</span>`;
+      const activityPill = activityScore(e) >= 4 ? `<span class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700 border border-emerald-100">Activity High</span>` : ``;
+      const verifiedPill = isVerified(e) ? `<span class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700 border border-emerald-100">Verified</span>` : ``;
+
+      const showWhy = state.showWhy && item.why.length;
+      const whyPills = showWhy ? item.why.map(w => `<span class="inline-flex rounded-full bg-slate-900 px-3 py-1.5 text-xs text-white">${escapeHtml(w)}</span>`).join("") : "";
+
+      const dbg = state.debug ? `
+        <div class="mt-2 text-xs text-slate-500">
+          Debug: interest=${(item.dbg.interestPts||0).toFixed(1)} • major=${(item.dbg.majorPts||0).toFixed(1)} • active=${(item.dbg.activePts||0).toFixed(1)} • verified=${(item.dbg.verifiedPts||0).toFixed(1)}
+        </div>
+      ` : ``;
+
+      const openBtn = `<button class="openBtn rounded-xl bg-blue-600 px-3 py-2 text-xs text-white hover:bg-blue-700" data-name="${escapeHtml(title)}">Open</button>`;
+      const whyBtn = `<button class="whyBtn rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs hover:bg-slate-50" data-why="${escapeHtml(item.why.join(" • "))}" data-name="${escapeHtml(title)}">Why this?</button>`;
+
+      return `
+        <article class="rounded-3xl border border-slate-200 bg-white p-4 hover:shadow-soft transition">
+          <div class="flex items-start gap-3">
+            <div class="h-10 w-10 rounded-2xl bg-slate-100 border border-slate-200 overflow-hidden grid place-items-center flex-shrink-0">
+              ${logo ? `<img src="${escapeHtml(logo)}" alt="" class="h-full w-full object-cover">` : `<span class="text-[10px] text-slate-500">logo</span>`}
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <div class="font-semibold text-slate-900 truncate">${escapeHtml(title)}</div>
+                ${scorePill}
+              </div>
+              <div class="mt-0.5 text-xs text-slate-500 truncate">${escapeHtml(subtitle)}</div>
+
+              <div class="mt-2 flex flex-wrap gap-2">
+                ${themeChip}
+                ${domainChips}
+                ${verifiedPill}
+                ${activityPill}
+              </div>
+
+              <div class="mt-3 text-sm text-slate-600 line-clamp-3">${escapeHtml((e.description_preview||e.tagline||"").toString())}</div>
+              ${dbg}
+              <div class="mt-4 flex items-center gap-2">
+                ${whyBtn}
+                ${openBtn}
+              </div>
+              ${showWhy ? `<div class="mt-3 flex flex-wrap gap-2">${whyPills}</div>` : ``}
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function attachCardHandlers() {
+      document.querySelectorAll(".whyBtn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const name = btn.dataset.name || "Why this?";
+          const why = btn.dataset.why || "";
+          openModal("Why this?", `
+            <div class="space-y-2">
+              <div class="font-semibold">${escapeHtml(name)}</div>
+              <div class="text-slate-600">Top reasons:</div>
+              <ul class="list-disc ml-5 text-slate-700">
+                ${why.split(" • ").filter(Boolean).map(x => `<li>${escapeHtml(x)}</li>`).join("")}
+              </ul>
+            </div>
+          `);
+        });
+      });
+
+      document.querySelectorAll(".openBtn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          openModal("Open", `<div class="text-slate-700">In the real app, this would open the org page for <b>${escapeHtml(btn.dataset.name||"")}</b>.</div>`);
+        });
+      });
+    }
+
+    
+    
+    function humanStageLabel() {
+      const m = stageMode();
+      if (m === "career_first") return "Career-first (Junior/Senior/Graduate)";
+      if (m === "explore_first") return "Explore-first (Freshman/Sophomore)";
+      return "Balanced";
+    }
+
+    function selectedInterestsFriendly() {
+      const map = {
+        "Academic": "Academic",
+        "Professional Development": "Professional Development",
+        "Cultural / Identity-Based": "Cultural & Identity",
+        "Religious / Spiritual": "Faith & Spirituality",
+        "Service / Volunteering": "Service & Volunteering",
+        "Political / Activism": "Political & Activism",
+        "Arts & Media": "Arts & Media",
+        "Sports & Athletics": "Sports & Athletics",
+        "Recreational": "Recreational / Social"
+      };
+      return Array.from(state.themes).map(t => map[t] || t);
+    }
+
+    function stageStackNarrative() {
+      const y = state.year || "";
+      const mode = stageMode();
+      if (mode === "career_first") {
+        return `Since you’re a ${y}, I’m putting major/career-related clubs first, and I’m still making sure your faith/identity picks show up near the top.`;
+      }
+      if (mode === "explore_first") {
+        return `Since you’re a ${y}, I start with community matches (like faith or identity), then I add something that fits your major/career path.`;
+      }
+      return `I’m balancing community + career: if you picked a faith/identity community, I keep that visible near the top, and I still try to include at least one major-related academic/professional club.`;
+    }
+
+    function shortProfileLine() {
+      const interests = selectedInterestsFriendly();
+      const bits = [];
+      if (state.year) bits.push(state.year);
+      if (state.majorDisplay) bits.push(state.majorDisplay);
+      if (interests.length) bits.push(interests.join(", "));
+      return bits.join(" • ");
+    }
+
+    function whyForItem(item, slotIndex) {
+      const e = item.entry || {};
+      const tags = extractTagsFromDomain(e.domain);
+      const reasons = [];
+
+      const mode = stageMode();
+      if (slotIndex === 0) {
+        if (mode === "career_first") reasons.push("I put this first because it’s a strong fit for your major/career right now.");
+        else if (mode === "explore_first") reasons.push("I put this first because it matches what you said matters most to you.");
+        else reasons.push("I put this near the top because it’s one of the strongest overall matches for your profile.");
+      }
+
+      const mr = majorRelated(e);
+      if (mr.ok) reasons.push(`You’re majoring in ${state.majorDisplay}, and this is a close match (${mr.reason}).`);
+
+      const theme = String(e.theme || "");
+      if (state.themes.has(theme)) {
+        const themeMap = {
+          "Academic": "Academic",
+          "Professional Development": "Professional Development",
+          "Cultural / Identity-Based": "Cultural & Identity",
+          "Religious / Spiritual": "Faith & Spirituality",
+          "Service / Volunteering": "Service & Volunteering",
+          "Political / Activism": "Political & Activism",
+          "Arts & Media": "Arts & Media",
+          "Sports & Athletics": "Sports & Athletics",
+          "Recreational": "Recreational / Social"
+        };
+        const friendlyTheme = themeMap[theme] || theme;
+        reasons.push(`You said you’re interested in ${friendlyTheme}, and this club fits that.`);
+      }
+
+      if (matchesFaithPrefs(e)) {
+        if (state.faithOpen) reasons.push("You picked Faith & Spirituality and chose “Open,” so I included a strong faith-based option.");
+        else {
+          const picked = Array.from(state.faithSelected);
+          if (picked.length) reasons.push(`You told me your faith preference is (${picked.join(", ")}), so I made sure you saw at least one match.`);
+          else reasons.push("You refined your faith preference, so I made sure you saw at least one match.");
+        }
+      }
+
+      if (matchesIdentityPrefs(e)) {
+        if (state.identityOpen) reasons.push("You picked Cultural & Identity and chose “Open,” so I included a strong community match.");
+        else {
+          const picked = Array.from(state.identitySelected);
+          if (picked.length) reasons.push(`You told me your identity/community preference is (${picked.join(", ")}), so I included a match.`);
+          else reasons.push("You refined your identity preference, so I included a match.");
+        }
+      }
+
+      if (String(e.activity_score || "").toLowerCase().includes("high")) reasons.push("It also looks active, which usually means better events and consistency.");
+      if (String(e.verified || "").toLowerCase() === "true" || e.verified === true) reasons.push("It’s verified, so it’s more trustworthy / official.");
+
+      const isCareerTheme = (theme === "Academic" || theme === "Professional Development");
+      if (isCareerTheme && isIdentityAffiliated(e)) {
+        const okFaith = state.wantsFaith && (state.faithOpen || tags.faith.some(x => state.faithSelected.has(x)));
+        const okIdent = state.wantsIdentity && (state.identityOpen || tags.identity.some(x => state.identitySelected.has(x)));
+        if (okFaith || okIdent) reasons.push("Also: this is an identity-focused professional/academic org, and I only included it because it matches what you selected (or you set it to Open).");
+      }
+
+      return reasons.slice(0, 4);
+    }
+
+    function renderReasoning() {
+      const panel = $("reasoningPanel");
+      const root = $("reasoningText");
+      if (!panel || !root) return;
+
+      if (!state.showReasoning) {
+        panel.classList.add("hidden");
+        return;
+      }
+      panel.classList.remove("hidden");
+
+      const log = state.buildLog;
+      if (!log) {
+        root.innerHTML = `<div class="text-slate-600">Pick interests and click <span class="font-medium">Get recommendations</span> to see the explanation.</div>`;
+        return;
+      }
+
+      const header = `
+        <div class="rounded-xl bg-white border border-slate-200 px-3 py-2">
+          <div class="text-xs text-slate-500">Your profile</div>
+          <div class="font-medium">${escapeHtml(log.profileLine)}</div>
+        </div>
+        <div class="mt-2">${escapeHtml(log.narrative)}</div>
+        <div class="mt-2 text-slate-600">Here’s why each club showed up, in the exact order I stacked it:</div>
+      `;
+
+      const items = log.items.map((it, i) => {
+        const bullets = (it.reasons || []).map(r => `<div class="text-slate-600">• ${escapeHtml(r)}</div>`).join("");
+        return `
+          <div class="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-3">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="font-semibold">${i+1}. ${escapeHtml(it.name)}</div>
+                <div class="text-xs text-slate-500">${escapeHtml(it.role)}</div>
+              </div>
+              <div class="text-xs text-slate-500">${escapeHtml(it.scoreLabel || "")}</div>
+            </div>
+            <div class="mt-2">${bullets || `<div class="text-slate-600">• Strong overall match.</div>`}</div>
+          </div>
+        `;
+      }).join("");
+
+      root.innerHTML = header + items;
+    }
+
+    function copyReasoningToClipboard() {
+      const log = state.buildLog;
+      if (!log) return;
+
+      const lines = [];
+      lines.push(`Your profile: ${log.profileLine}`);
+      lines.push(log.narrative);
+      lines.push("");
+      lines.push("Top 5 (stack order):");
+      log.items.forEach((it, i) => {
+        lines.push(`${i+1}. ${it.name} — ${it.role}`);
+        (it.reasons || []).forEach(r => lines.push(`   - ${r}`));
+      });
+
+      const text = lines.join("\n");
+      (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text) : Promise.reject())
+        .then(()=> openModal("Copied", `<div class="text-slate-700">Copied the explanation to your clipboard.</div>`))
+        .catch(()=> openModal("Copy failed", `<div class="text-slate-700">Couldn’t copy automatically. Select and copy from the panel.</div>`));
+    }
+
+
+    function renderResults() {
+      const root = $("recommended");
+      root.innerHTML = "";
+      const rec = state.recommended || [];
+      rec.forEach(item => root.insertAdjacentHTML("beforeend", renderCard(item)));
+      attachCardHandlers();
+      renderReasoning();
+      $("matchCount").textContent = `${(state.scored || []).length} matches`;
+      $("emptyState").classList.toggle("hidden", rec.length !== 0);
+    }
+
+    function clearResults() {
+      state.scored = [];
+      state.recommended = [];
+      $("recommended").innerHTML = "";
+      $("matchCount").textContent = "0 matches";
+      $("emptyState").classList.add("hidden");
+    }
+
+    function updateProfilePill() {
+      const parts = [];
+      if (state.year) parts.push(state.year);
+      if (state.majorDisplay) parts.push(state.majorDisplay.toLowerCase());
+      if (state.interests.size) parts.push(Array.from(state.interests).slice(0,2).join(" • "));
+      $("profilePill").textContent = parts.length ? parts.join(" • ") : "—";
+    }
+
+    function rerun() {
+      const data = state.data || [];
+      const out = [];
+      for (const entry of data) {
+        const item = computeScore(entry);
+        if (!item) continue;
+        out.push(item);
+      }
+      state.scored = out;
+      buildRecommended();
+      renderResults();
+    }
+
+    $("search").addEventListener("input", (e) => {
+      state.search = e.target.value;
+      buildRecommended();
+      renderResults();
+    });
+
+    $("sort").addEventListener("change", (e) => {
+      state.sort = e.target.value;
+      buildRecommended();
+      renderResults();
+    });
+
+    $("btnResetResults").addEventListener("click", () => {
+      $("search").value = "";
+      $("sort").value = "best";
+      state.search = "";
+      state.sort = "best";
+      buildRecommended();
+      renderResults();
+    });
+
+    $("btnCopyReasoning").addEventListener("click", copyReasoningToClipboard);
+
+
+    $("btnGet").addEventListener("click", async () => {
+      if (state.interests.size === 0) {
+        openModal("Pick an interest", "<div>Please select at least one interest to get recommendations.</div>");
+        return;
+      }
+      state.year = $("yearSelect").value || state.year;
+      state.majorDisplay = $("majorInput").value.trim();
+      state.majorKey = state.majorDisplay.toLowerCase();
+      try {
+        await loadData(false);
+        if (state.wantsFaith || state.wantsIdentity) await buildRefineOptions();
+        updateProfilePill();
+        rerun();
+      } catch (e) {
+        openModal("Couldn’t load data", `<div class="text-red-700">${escapeHtml(e.message || String(e))}</div>`);
+      }
+    });
+
+    $("btnSurprise").addEventListener("click", () => {
+      const years = ["Freshman","Sophomore","Junior","Senior"];
+      const year = years[Math.floor(Math.random()*years.length)];
+      $("yearSelect").value = year;
+      state.year = year;
+      const m = normalizeMajorLabel(MAJORS[Math.floor(Math.random()*MAJORS.length)] || "Accounting");
+      setMajor(m);
+
+      state.interests.clear();
+      state.themes.clear();
+      const pool = INTERESTS.filter(i => !["Faith & Spirituality","Cultural & Identity"].includes(i.ux));
+      while (state.interests.size < 2 && pool.length) {
+        const pick = pool[Math.floor(Math.random()*pool.length)];
+        state.interests.add(pick.ux);
+        state.themes.add(pick.theme);
+      }
+      state.wantsFaith = false;
+      state.wantsIdentity = false;
+      maybeShowRefine();
+      renderInterestPills();
+      updateProfilePill();
+      clearResults();
+    });
+
+    (async function init() {
+      renderInterestPills();
+      updateProfilePill();
+      try { await loadData(false); } catch {}
+      maybeShowRefine();
+    })();
+  </script>
+</body>
+</html>
