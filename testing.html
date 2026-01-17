@@ -116,6 +116,30 @@
               </div>
             </div>
 
+              <div id="academicRefineWrap" class="hidden mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div class="text-sm font-semibold">Refine Academic</div>
+                <div class="mt-1 text-sm text-slate-600">
+                  You selected Academic. Optionally choose disciplines to focus recommendations (this is a soft boost).
+                </div>
+
+                <div id="academicRefineLoading" class="mt-3 text-sm text-slate-600">Loading disciplines from the API…</div>
+
+                <div id="academicRefineBody" class="hidden mt-3 space-y-3">
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <div class="text-sm font-medium">Disciplines</div>
+                      <div class="text-xs text-slate-500">Choose any that apply (or select "Open").</div>
+                    </div>
+                    <label class="inline-flex items-center gap-2 text-sm">
+                      <input id="disciplineOpen" type="checkbox" class="h-4 w-4 rounded border-slate-300">
+                      <span class="text-slate-700">Open</span>
+                    </label>
+                  </div>
+                  <div id="disciplineTags" class="mt-2 flex flex-wrap gap-2"></div>
+                  <div class="text-xs text-slate-500">Tip: uncheck Open, then pick 1–3 disciplines to tighten Academic results without hiding everything.</div>
+                </div>
+              </div>
+
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <div class="text-sm font-semibold">College year</div>
@@ -253,11 +277,32 @@
               <ul class="mt-2 list-disc ml-5 text-slate-600">
                 <li>Adding more interests</li>
                 <li>Turning on “Open” for Faith/Identity</li>
+                <li>Turning on “Open” for Discipline (Academic)</li>
                 <li>Clearing search</li>
               </ul>
             </div>
           </div>
         </div>
+
+      <section class="lg:col-span-12">
+        <div id="diagPanel" class="rounded-3xl border border-slate-200 bg-white shadow-soft overflow-hidden">
+          <div class="p-5 border-b border-slate-200 bg-white flex items-start justify-between gap-4">
+            <div>
+              <div class="text-sm text-slate-500">Diagnostics</div>
+              <div class="text-xl font-semibold">Inputs → outputs (JSON)</div>
+              <div class="mt-1 text-sm text-slate-600">Use this to quickly verify what the user selected and what the algorithm produced, including explanations.</div>
+            </div>
+            <div class="shrink-0 flex items-center gap-2">
+              <button id="btnCopyDiag" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs hover:bg-slate-50">Copy JSON</button>
+              <button id="btnDownloadDiagTxt" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs hover:bg-slate-50">Download .txt</button>
+            </div>
+          </div>
+          <div class="p-5">
+            <pre id="diagJson" class="max-h-72 overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs leading-relaxed text-slate-800"></pre>
+          </div>
+        </div>
+      </section>
+
       </section>
     </div>
   </main>
@@ -294,6 +339,10 @@
       buildLog: null,
       wantsFaith: false,
       wantsIdentity: false,
+      wantsAcademic: false,
+      disciplineOptions: [],
+      disciplineSelected: new Set(),
+      disciplineOpen: false,
       faithOptions: [],
       identityOptions: [],
       faithSelected: new Set(),
@@ -330,6 +379,7 @@
             <li>Year adjusts emphasis (explore vs career/leadership).</li>
             <li>Major boosts Academic/Professional orgs via <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs">associated_majors</code>.</li>
             <li>Guardrails: if you pick Faith/Cultural, you must specify communities (or choose Open).</li>
+            <li>Optional: if you pick Academic, you can refine by Discipline (soft boost).</li>
             <li>Guarantee: at least <b>one</b> recommended org is related to your major (when possible).</li>
           </ul>
         </div>
@@ -362,8 +412,10 @@
           }
           state.wantsFaith = state.interests.has("Faith & Spirituality");
           state.wantsIdentity = state.interests.has("Cultural & Identity");
+          state.wantsAcademic = state.interests.has("Academic");
           maybeShowRefine();
-      renderReasoning();
+          maybeShowAcademicRefine();
+          renderReasoning();
           renderInterestPills();
           updateProfilePill();
         });
@@ -376,11 +428,15 @@
       state.themes.clear();
       state.wantsFaith = false;
       state.wantsIdentity = false;
+      state.wantsAcademic = false;
       state.faithSelected.clear();
       state.identitySelected.clear();
+      state.disciplineSelected.clear();
       state.faithOpen = false;
       state.identityOpen = false;
+      state.disciplineOpen = false;
       maybeShowRefine();
+      maybeShowAcademicRefine();
       renderInterestPills();
       updateProfilePill();
       clearResults();
@@ -464,6 +520,7 @@
       try {
         await loadData(true);
         if (state.wantsFaith || state.wantsIdentity) await buildRefineOptions();
+        if (state.wantsAcademic) await buildAcademicRefineOptions();
         rerun();
       } catch (e) {
         openModal("Reload failed", `<div class="text-red-700">${escapeHtml(e.message || String(e))}</div>`);
@@ -530,8 +587,18 @@
     }
 
     function renderTagButtons(kind, options, selectedSet, openFlagId) {
-      const root = kind === "faith" ? $("faithTags") : $("identityTags");
+      const rootId = (kind === "faith") ? "faithTags" : (kind === "identity") ? "identityTags" : "disciplineTags";
+      const root = $(rootId);
+      if (!root) return;
       root.innerHTML = "";
+
+      const openEl = openFlagId ? $(openFlagId) : null;
+      const isOpen = !!(openEl && openEl.checked);
+
+      // For Discipline refinement we keep buttons clickable even when Open is checked,
+      // so a user can click a discipline to automatically turn Open off.
+      const disableButtons = isOpen && kind !== "discipline";
+
       options.forEach(val => {
         const selected = selectedSet.has(val);
         const btn = document.createElement("button");
@@ -539,12 +606,18 @@
         btn.className = "rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm hover:bg-slate-50";
         if (selected) btn.classList.add("bg-slate-900","text-white","border-slate-900");
         btn.textContent = val;
-        btn.disabled = $(openFlagId).checked;
-        btn.classList.toggle("opacity-50", $(openFlagId).checked);
+        btn.disabled = disableButtons;
+        btn.classList.toggle("opacity-50", disableButtons);
         btn.addEventListener("click", () => {
+          // If the user clicks a discipline while Open is on, auto-disable Open.
+          if (kind === "discipline" && openEl && openEl.checked) {
+            openEl.checked = false;
+            state.disciplineOpen = false;
+          }
           if (selectedSet.has(val)) selectedSet.delete(val);
           else selectedSet.add(val);
-          renderRefine();
+          if (kind === "discipline") renderAcademicRefine();
+          else renderRefine();
         });
         root.appendChild(btn);
       });
@@ -558,6 +631,71 @@
       renderTagButtons("faith", state.faithOptions, state.faithSelected, "faithOpen");
       renderTagButtons("identity", state.identityOptions, state.identitySelected, "identityOpen");
     }
+
+
+    // --- Academic (Discipline) refinement ---
+    function extractDisciplinesFromDomain(domainStr) {
+      const tokens = parseDomainTokens(domainStr);
+      const out = [];
+      for (const t of tokens) {
+        const k = (t.kind || "").toString().trim().toLowerCase();
+        if (k === "discipline") {
+          const v = (t.value || "").toString().trim();
+          if (v) out.push(v);
+        }
+      }
+      return out;
+    }
+
+    function buildDisciplineOptionsFromData(data) {
+      const set = new Set();
+      for (const entry of data) {
+        for (const d of extractDisciplinesFromDomain(entry.domain)) set.add(d);
+      }
+      state.disciplineOptions = Array.from(set).sort((a,b)=>a.localeCompare(b));
+    }
+
+    async function buildAcademicRefineOptions() {
+      $("academicRefineWrap").classList.remove("hidden");
+      $("academicRefineLoading").classList.remove("hidden");
+      $("academicRefineBody").classList.add("hidden");
+      const data = state.data || await loadData(false);
+      buildDisciplineOptionsFromData(data);
+      renderAcademicRefine();
+      $("academicRefineLoading").classList.add("hidden");
+      $("academicRefineBody").classList.remove("hidden");
+    }
+
+    function maybeShowAcademicRefine() {
+      const show = !!state.wantsAcademic;
+      $("academicRefineWrap").classList.toggle("hidden", !show);
+      if (!show) return;
+      if (state.data) {
+        buildDisciplineOptionsFromData(state.data);
+        renderAcademicRefine();
+        $("academicRefineLoading").classList.add("hidden");
+        $("academicRefineBody").classList.remove("hidden");
+      } else {
+        $("academicRefineLoading").classList.remove("hidden");
+        $("academicRefineBody").classList.add("hidden");
+      }
+    }
+
+    function renderAcademicRefine() {
+      const open = $("disciplineOpen");
+      if (open) open.checked = !!state.disciplineOpen;
+      renderTagButtons("discipline", state.disciplineOptions, state.disciplineSelected, "disciplineOpen");
+    }
+
+    // Discipline Open toggle
+    document.addEventListener("change", (e) => {
+      if (!e || !e.target) return;
+      if (e.target.id === "disciplineOpen") {
+        state.disciplineOpen = !!e.target.checked;
+        if (state.disciplineOpen) state.disciplineSelected.clear();
+        renderAcademicRefine();
+      }
+    });
 
     $("faithOpen").addEventListener("change", (e) => {
       state.faithOpen = e.target.checked;
@@ -696,6 +834,19 @@
       dbg.majorPts = majorPts;
       dbg.majorRel = relPct;
 
+      let disciplinePts = 0;
+      if (state.wantsAcademic && isCareerTheme && !state.disciplineOpen && state.disciplineSelected.size) {
+        const discs = extractDisciplinesFromDomain(entry.domain);
+        const picked = new Set(Array.from(state.disciplineSelected).map(x => String(x||"").toLowerCase()));
+        const hit = discs.find(d => picked.has(String(d||"").toLowerCase()));
+        if (hit) {
+          disciplinePts = 18 * weights.career;
+          score += disciplinePts;
+          why.push(`Discipline focus: ${hit}`);
+        }
+      }
+      dbg.disciplinePts = disciplinePts;
+
       if (isCareerTheme && weights.career >= 1.2) why.push(`Strong for ${state.year}s (career + leadership)`);
       else if (!isCareerTheme && weights.explore >= 1.15) why.push(`Great for ${state.year}s (explore + community)`);
 
@@ -775,7 +926,16 @@
       return tags.identity.some(x => state.identitySelected.has(x));
     }
 
-    
+    function matchesDisciplinePrefs(entry) {
+      if (!state.wantsAcademic) return false;
+      if (!["Academic","Professional Development"].includes(String(entry.theme || ""))) return false;
+      if (state.disciplineOpen || !state.disciplineSelected.size) return false;
+      const discs = extractDisciplinesFromDomain(entry.domain);
+      const picked = new Set(Array.from(state.disciplineSelected).map(x => String(x||"").toLowerCase()));
+      return discs.some(d => picked.has(String(d||"").toLowerCase()));
+    }
+
+
     function stageMode() {
       const y = (state.year || "").toLowerCase();
       if (["junior","senior","graduate"].includes(y)) return "career_first";
@@ -790,7 +950,10 @@
     function bestPayoff(ordered) {
       const faithPick = state.wantsFaith ? (ordered.find(x => matchesFaithPrefs(x.entry)) || null) : null;
       const identPick = state.wantsIdentity ? (ordered.find(x => matchesIdentityPrefs(x.entry)) || null) : null;
-      return { faithPick, identPick };
+      const discPick = (state.wantsAcademic && !state.disciplineOpen && state.disciplineSelected.size)
+        ? (ordered.find(x => matchesDisciplinePrefs(x.entry)) || null)
+        : null;
+      return { faithPick, identPick, discPick };
     }
 
     function selectWithVariety(ordered, topN=5) {
@@ -808,10 +971,22 @@
 
       const mode = stageMode();
       const majorAnchor = bestMajorAnchor(ordered);
-      const { faithPick, identPick } = bestPayoff(ordered);
+      const { faithPick, identPick, discPick } = bestPayoff(ordered); // discPick kept for legacy helpers; discipline coverage is handled below
 
-      const primaryPayoff = faithPick || identPick || null;
-      const secondaryPayoff = (faithPick && identPick) ? (faithPick === primaryPayoff ? identPick : faithPick) : null;
+      // Payoffs are the "extra-step" refinements. Keep them visible near the top.
+      // Priority: Faith -> Identity -> Discipline.
+      const payoffListRaw = [faithPick, identPick].filter(Boolean);
+      const payoffList = [];
+      const seen = new Set();
+      for (const it of payoffListRaw) {
+        const k = (it.entry?.name || "").toString().toLowerCase();
+        if (!k || seen.has(k)) continue;
+        payoffList.push(it);
+        seen.add(k);
+      }
+      const primaryPayoff = payoffList[0] || null;
+      const secondaryPayoff = payoffList[1] || null;
+      const tertiaryPayoff = payoffList[2] || null;
 
       // --- Slotting rules (stacking policy) ---
       // Career-first (Junior/Senior/Graduate):
@@ -839,22 +1014,132 @@
 
       // If both payoff types exist, try to include the second payoff early (slot 3)
       if (chosen.length < topN && secondaryPayoff) add(secondaryPayoff);
+      if (chosen.length < topN && tertiaryPayoff) add(tertiaryPayoff);
 
-      // --- Variety across selected themes (one per interest) ---
-      const selectedThemes = Array.from(state.themes);
-      for (const t of selectedThemes) {
-        if (chosen.length >= topN) break;
-        const pick = ordered.find(x =>
-          String(x.entry.theme || "") === String(t) &&
-          !used.has((x.entry.name||"").toString().toLowerCase())
-        );
-        add(pick);
+
+      // --- Discipline coverage (before any filler) ---
+      // If user selected multiple disciplines, try to include one good match per discipline (when available)
+      if (state.wantsAcademic && !state.disciplineOpen && state.disciplineSelected && state.disciplineSelected.size) {
+        const norm = (s) => (s || "").toString().trim().toLowerCase();
+        const selectedDisciplines = Array.from(state.disciplineSelected);
+        for (const d of selectedDisciplines) {
+          if (chosen.length >= topN) break;
+          const pick = ordered.find(x => {
+            const key = norm(x.entry?.name);
+            if (!key || used.has(key)) return false;
+            const discs = extractDisciplinesFromDomain(x.entry?.domain || "");
+            return discs.some(v => norm(v) === norm(d));
+          });
+          add(pick);
+        }
       }
+      // --- Smart filler: use remaining slots to pick the most relevant remaining options ---
+      // Priority (in order):
+      //   1) satisfy any *uncovered* selected refinements (e.g., a second identity tag like Caribbean)
+      //   2) match selected refinements (even if already satisfied once)
+      //   3) match selected themes/interests
+      //   4) then highest base score
+      const norm = (s) => (s || "").toString().trim().toLowerCase();
 
-      // --- Fill remainder by best overall ---
-      for (const x of ordered) {
-        if (chosen.length >= topN) break;
-        add(x);
+      const selectedThemes = new Set(Array.from(state.themes || []).map(String));
+      const selectedFaith = new Set(Array.from(state.faithSelected || []).map(norm));
+      const selectedIdentity = new Set(Array.from(state.identitySelected || []).map(norm));
+      const selectedDisc = new Set(Array.from(state.disciplineSelected || []).map(norm));
+
+      const covered = {
+        faith: new Set(),
+        identity: new Set(),
+        discipline: new Set(),
+        themes: new Set()
+      };
+
+      const updateCoveredFromItem = (item) => {
+        if (!item || !item.entry) return;
+        const theme = String(item.entry.theme || "");
+        if (theme) covered.themes.add(theme);
+
+        const tags = extractTagsFromDomain(item.entry.domain || "");
+        for (const f of (tags.faith || [])) {
+          const k = norm(f);
+          if (selectedFaith.has(k)) covered.faith.add(k);
+        }
+        for (const i of (tags.identity || [])) {
+          const k = norm(i);
+          if (selectedIdentity.has(k)) covered.identity.add(k);
+        }
+        const discs = extractDisciplinesFromDomain(item.entry.domain || "");
+        for (const d of discs) {
+          const k = norm(d);
+          if (selectedDisc.has(k)) covered.discipline.add(k);
+        }
+      };
+
+      // initialize covered based on what we already chose in the "promise coverage" phase
+      for (const it of chosen) updateCoveredFromItem(it);
+
+      const calcRelevanceBonus = (item) => {
+        const e = item.entry || {};
+        const theme = String(e.theme || "");
+        const domain = e.domain || "";
+
+        const tags = extractTagsFromDomain(domain);
+        const faithTags = (tags.faith || []).map(norm);
+        const identTags = (tags.identity || []).map(norm);
+        const discs = extractDisciplinesFromDomain(domain).map(norm);
+
+        // Hits to selected refinements
+        const faithHits = (state.wantsFaith && !state.faithOpen) ? faithTags.filter(x => selectedFaith.has(x)) : [];
+        const identHits = (state.wantsIdentity && !state.identityOpen) ? identTags.filter(x => selectedIdentity.has(x)) : [];
+        const discHits  = (state.wantsAcademic && !state.disciplineOpen) ? discs.filter(x => selectedDisc.has(x)) : [];
+
+        // Uncovered hits are "more valuable" when filling remaining slots
+        const faithUncovered = faithHits.filter(x => !covered.faith.has(x));
+        const identUncovered = identHits.filter(x => !covered.identity.has(x));
+        const discUncovered  = discHits.filter(x => !covered.discipline.has(x));
+
+        let bonus = 0;
+
+        // 1) Uncovered refinements (strongest)
+        bonus += faithUncovered.length * 70;
+        bonus += identUncovered.length * 80;
+        bonus += discUncovered.length  * 75;
+
+        // 2) Any refinement match (still meaningful)
+        bonus += faithHits.length * 25;
+        bonus += identHits.length * 30;
+        bonus += discHits.length  * 28;
+
+        // 3) Theme/interest alignment
+        if (selectedThemes.has(theme)) bonus += 20;
+
+        // 4) Encourage variety across selected themes (light)
+        // If the theme is selected but not yet represented, give a small bump.
+        if (selectedThemes.has(theme) && !covered.themes.has(theme)) bonus += 18;
+
+        return bonus;
+      };
+
+      while (chosen.length < topN) {
+        let best = null;
+        let bestScore = -Infinity;
+
+        for (const x of ordered) {
+          const key = norm(x.entry?.name);
+          if (!key || used.has(key)) continue;
+
+          const base = (typeof x.score === "number" ? x.score : 0);
+          const bonus = calcRelevanceBonus(x);
+
+          const total = base + bonus;
+          if (total > bestScore) {
+            bestScore = total;
+            best = x;
+          }
+        }
+
+        if (!best) break;
+        add(best);
+        updateCoveredFromItem(best);
       }
 
       return chosen.slice(0, topN);
@@ -900,6 +1185,15 @@
         }
       }
 
+      if (state.wantsAcademic && !state.disciplineOpen && state.disciplineSelected.size) {
+        const hasDisc = chosen.some(x => matchesDisciplinePrefs(x.entry));
+        if (!hasDisc) {
+          const anyDisc = ordered.some(x => ["Academic","Professional Development"].includes(String(x.entry.theme||"")) && extractDisciplinesFromDomain(x.entry.domain).length);
+          if (!anyDisc) msgs.push("We couldn’t find any discipline-tagged Academic/Professional orgs in the data right now.");
+          else msgs.push("No Academic/Professional matches found for your selected discipline. Try selecting ‘Open’ or pick an additional discipline.");
+        }
+      }
+
       const el = $("coverageBanner");
       const txt = $("coverageBannerText");
       if (!msgs.length) {
@@ -917,6 +1211,7 @@
       if (majorRelated(e).ok) return "Major + career anchor";
       if (matchesFaithPrefs(e)) return "Faith payoff";
       if (matchesIdentityPrefs(e)) return "Identity payoff";
+      if (matchesDisciplinePrefs(e)) return "Discipline match";
       const t = String(e.theme || "");
       const themeMap = {
         "Academic": "Academic",
@@ -940,10 +1235,12 @@
       state.recommended = chosen;
 
       const mode = stageMode();
+      const hasDisciplineFocus = !!(state.wantsAcademic && !state.disciplineOpen && state.disciplineSelected.size);
       let ruleSummary = "";
-      if (mode === "career_first") ruleSummary = "Slot #1 prioritizes major/career fit; Slot #2 prioritizes your refined faith/identity (if available).";
-      else if (mode === "explore_first") ruleSummary = "Slot #1 prioritizes your refined faith/identity (if available); Slot #2 prioritizes major/career fit.";
-      else ruleSummary = "Top slots prioritize your refined faith/identity and major fit when applicable, then fill with interest variety.";
+      const payoffLabel = hasDisciplineFocus ? "faith/identity (and discipline focus)" : "faith/identity";
+      if (mode === "career_first") ruleSummary = `Slot #1 prioritizes major/career fit; Slot #2 prioritizes your refined ${payoffLabel} (if available).`;
+      else if (mode === "explore_first") ruleSummary = `Slot #1 prioritizes your refined ${payoffLabel} (if available); Slot #2 prioritizes major/career fit.`;
+      else ruleSummary = `Top slots prioritize your refined ${payoffLabel} and major fit when applicable, then fill with interest variety.`;
 
       const slots = (chosen || []).map((it, i) => {
         const name = (it.entry?.name || "Untitled").toString();
@@ -1255,7 +1552,7 @@
 
       const dbg = state.debug ? `
         <div class="mt-2 text-xs text-slate-500">
-          Debug: interest=${(item.dbg.interestPts||0).toFixed(1)} • major=${(item.dbg.majorPts||0).toFixed(1)} • active=${(item.dbg.activePts||0).toFixed(1)} • verified=${(item.dbg.verifiedPts||0).toFixed(1)}
+          Debug: interest=${(item.dbg.interestPts||0).toFixed(1)} • major=${(item.dbg.majorPts||0).toFixed(1)} • discipline=${(item.dbg.disciplinePts||0).toFixed(1)} • active=${(item.dbg.activePts||0).toFixed(1)} • verified=${(item.dbg.verifiedPts||0).toFixed(1)}
         </div>
       ` : ``;
 
@@ -1346,13 +1643,15 @@
     function stageStackNarrative() {
       const y = state.year || "";
       const mode = stageMode();
+      const hasDisciplineFocus = !!(state.wantsAcademic && !state.disciplineOpen && state.disciplineSelected.size);
+      const payoffLabel = hasDisciplineFocus ? "faith/identity picks (and your discipline focus)" : "faith/identity picks";
       if (mode === "career_first") {
-        return `Since you’re a ${y}, I’m putting major/career-related clubs first, and I’m still making sure your faith/identity picks show up near the top.`;
+        return `Since you’re a ${y}, I’m putting major/career-related clubs first, and I’m still making sure your ${payoffLabel} show up near the top.`;
       }
       if (mode === "explore_first") {
-        return `Since you’re a ${y}, I start with community matches (like faith or identity), then I add something that fits your major/career path.`;
+        return `Since you’re a ${y}, I start with community matches (like faith or identity)${hasDisciplineFocus ? " and your discipline focus" : ""}, then I add something that fits your major/career path.`;
       }
-      return `I’m balancing community + career: if you picked a faith/identity community, I keep that visible near the top, and I still try to include at least one major-related academic/professional club.`;
+      return `I’m balancing community + career: if you picked a faith/identity community${hasDisciplineFocus ? " (or a discipline focus)" : ""}, I keep that visible near the top, and I still try to include at least one major-related academic/professional club.`;
     }
 
     function shortProfileLine() {
@@ -1412,6 +1711,14 @@
           if (picked.length) reasons.push(`You told me your identity/community preference is (${picked.join(", ")}), so I included a match.`);
           else reasons.push("You refined your identity preference, so I included a match.");
         }
+      }
+
+      if (matchesDisciplinePrefs(e)) {
+        const picked = Array.from(state.disciplineSelected);
+        const discs = extractDisciplinesFromDomain(e.domain);
+        const hit = discs.find(d => picked.map(x=>String(x||"").toLowerCase()).includes(String(d||"").toLowerCase()));
+        if (hit) reasons.push(`You asked for Academic recommendations focused on ${hit}, so this moved up.`);
+        else reasons.push("You refined Academic by discipline, so I included a close discipline match.");
       }
 
       if (String(e.activity_score || "").toLowerCase().includes("high")) reasons.push("It also looks active, which usually means better events and consistency.");
@@ -1493,6 +1800,78 @@
     }
 
 
+
+    // --- Diagnostics panel: inputs → outputs JSON ---
+    function buildDiagnosticsPayload() {
+      const inputs = {
+        year: state.year || "",
+        major: state.majorDisplay || "",
+        interests: Array.from(state.interests || []),
+        themes: Array.from(state.themes || []),
+        toggles: {
+          preferActive: !!state.preferActive,
+          showWhy: !!state.showWhy,
+          debugScores: !!state.debugScores,
+          showReasoning: !!state.showReasoning
+        },
+        search: state.search || "",
+        sort: state.sort || "best",
+        refine: {
+          faith: { open: !!state.faithOpen, selected: Array.from(state.faithSelected || []) },
+          identity: { open: !!state.identityOpen, selected: Array.from(state.identitySelected || []) },
+          discipline: { open: !!state.disciplineOpen, selected: Array.from(state.disciplineSelected || []) }
+        }
+      };
+
+      const rec = (state.recommended || []).map((it, idx) => ({
+        index: idx + 1,
+        name: (it.entry?.name || "Untitled").toString(),
+        theme: (it.entry?.theme || "").toString(),
+        school: (it.entry?.school || "").toString(),
+        score: (typeof it.score === "number" ? it.score : null),
+        roundedScore: (typeof it.score === "number" ? Math.round(it.score) : null),
+        role: (state.buildLog?.items?.[idx]?.role) || computeRoleForSlot(it, idx),
+        reasons: whyForItem(it, idx),
+        scoreBreakdown: it.dbg || null,
+        domain: (it.entry?.domain || "").toString(),
+        majorsTagged: (it.entry?.associated_majors || "").toString()
+      }));
+
+      return {
+        ts: new Date().toISOString(),
+        inputs,
+        output: {
+          matchesCount: (state.scored || []).length,
+          recommended: rec,
+          explanation: state.buildLog || null
+        }
+      };
+    }
+
+    function renderDiagnostics() {
+      const pre = $("diagJson");
+      if (!pre) return;
+      const payload = buildDiagnosticsPayload();
+      const txt = JSON.stringify(payload, null, 2);
+      pre.textContent = txt;
+      state.lastDiagJson = txt;
+    }
+
+    function copyDiagnosticsToClipboard() {
+      const txt = state.lastDiagJson || ($("diagJson")?.textContent || "");
+      if (!txt) {
+        openModal("Nothing to copy", `<div class="text-slate-700">Run <span class="font-medium">Get recommendations</span> first.</div>`);
+        return;
+      }
+
+
+
+      (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(txt) : Promise.reject())
+        .then(()=> openModal("Copied", `<div class="text-slate-700">Copied diagnostics JSON to your clipboard.</div>`))
+        .catch(()=> openModal("Copy failed", `<div class="text-slate-700">Couldn’t copy automatically. Select and copy from the diagnostics panel.</div>`));
+    }
+
+
     function renderResults() {
       const root = $("recommended");
       root.innerHTML = "";
@@ -1500,7 +1879,8 @@
       rec.forEach(item => root.insertAdjacentHTML("beforeend", renderCard(item)));
       attachCardHandlers();
       renderReasoning();
-      $("matchCount").textContent = `${(state.scored || []).length} matches`;
+            renderDiagnostics();
+$("matchCount").textContent = `${(state.scored || []).length} matches`;
       $("emptyState").classList.toggle("hidden", rec.length !== 0);
     }
 
@@ -1509,6 +1889,7 @@
       state.recommended = [];
       $("recommended").innerHTML = "";
       $("matchCount").textContent = "0 matches";
+      renderDiagnostics();
       $("emptyState").classList.add("hidden");
     }
 
@@ -1557,7 +1938,31 @@
     $("btnCopyReasoning").addEventListener("click", copyReasoningToClipboard);
 
 
-    $("btnGet").addEventListener("click", async () => {
+    
+    
+    // Download diagnostics JSON as a .txt file (global scope)
+    function downloadDiagnosticsAsTxt() {
+      const txt = state.lastDiagJson || ($("diagJson")?.textContent || "");
+      if (!txt) {
+        openModal("Nothing to download", `<div class="text-slate-700">Run <span class="font-medium">Get recommendations</span> first.</div>`);
+        return;
+      }
+      const blob = new Blob([txt], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      a.href = url;
+      a.download = `club-recs-diagnostics-${stamp}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 500);
+    }
+
+    $("btnCopyDiag").addEventListener("click", copyDiagnosticsToClipboard);
+
+    $("btnDownloadDiagTxt").addEventListener("click", downloadDiagnosticsAsTxt);
+$("btnGet").addEventListener("click", async () => {
       if (state.interests.size === 0) {
         openModal("Pick an interest", "<div>Please select at least one interest to get recommendations.</div>");
         return;
@@ -1568,6 +1973,7 @@
       try {
         await loadData(false);
         if (state.wantsFaith || state.wantsIdentity) await buildRefineOptions();
+        if (state.wantsAcademic) await buildAcademicRefineOptions();
         updateProfilePill();
         rerun();
       } catch (e) {
@@ -1593,7 +1999,12 @@
       }
       state.wantsFaith = false;
       state.wantsIdentity = false;
+      state.wantsAcademic = state.interests.has("Academic");
+      // Reset refinements for surprise
+      state.disciplineSelected.clear();
+      state.disciplineOpen = false;
       maybeShowRefine();
+      maybeShowAcademicRefine();
       renderInterestPills();
       updateProfilePill();
       clearResults();
@@ -1602,8 +2013,10 @@
     (async function init() {
       renderInterestPills();
       updateProfilePill();
+      renderDiagnostics();
       try { await loadData(false); } catch {}
       maybeShowRefine();
+      maybeShowAcademicRefine();
     })();
   </script>
 </body>
